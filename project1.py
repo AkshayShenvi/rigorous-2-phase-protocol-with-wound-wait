@@ -1,6 +1,8 @@
-
-transaction_list = []
-locks_dict = {}
+import queue
+transaction_table = {}
+locks_table = {}
+counter=0
+waiting_list=[]
 
 
 def check_operation(opr):
@@ -33,26 +35,38 @@ def clean_input(input):
         temp_clean=i.replace(" ","")
         input_ops[n]=temp_clean
         operation.append(check_operation(i))
-
-
-
-
     return operation
 
-    for op in operation:
-        if op[0] == 'begin':
-            begin(op[1])
+def read(item,t_id):
+    if item in locks_table:
+        lock_info=locks_table[item]
+        if t_id in lock_info['t_id_waiting']:
+            # waiting_list.append('r'+)
 
-def begin(transaction_id):
+        else:
+
+
+    else:
+        new_item={}
+        new_item['state']='read'
+        new_item['t_id_holding']=[]
+        new_item['t_id_waiting']=[]
+        new_item['t_id_holding'].append(t_id)
+        locks_table[item]=new_item
+        
+
+def write(item,t_id):
+
+def begin(transaction_id,counter):
     new_transaction = {}
-    new_transaction['transaction_id'] = transaction_id
-    new_transaction['timestamp'] = 0
+
+    new_transaction['timestamp'] = counter
     new_transaction['state'] = 'active'
-    new_transaction['item_list'] = []
+    new_transaction['locked_items'] = []
 
-    transaction_list.append(new_transaction)
+    transaction_table[transaction_id]=new_transaction
 
-    print('new transaction started: ' + str(new_transaction))
+
 
 
 if __name__=='__main__':
@@ -61,5 +75,21 @@ if __name__=='__main__':
     file=open("input.txt","r+")
     input=file.read()
     operation_list=clean_input(input)
+    print(operation_list)
+    for op in operation_list:
+        if op[0] == 'begin':
+            counter+=1
+            begin(op[1],counter)
+            print(transaction_table)
+            print(locks_table)
+        if op[0] == 'read':
+            read(op[2],op[1])
+            print(transaction_table)
+            print(locks_table)
+        if op[0] == 'end':
+            #check holding locks
+            #try to execute waiting_lock of that item on which ended transaction had a holding lock.
+            #release all locks
+            print("end")
     file.close()
 
