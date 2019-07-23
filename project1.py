@@ -1,20 +1,34 @@
 def checkoperation(opr):
-    if opr=='b':
+    operation = 'invalid'
+    transaction_num = 'invalid'
+    item=None
+    if opr[0]=='b':
         operation='begin'
-    elif opr=='r':
+        transaction_num=opr[1]
+    elif opr[0]=='r':
         operation='read'
-    elif opr=='w':
+        transaction_num = opr[1]
+        item=opr[3]
+    elif opr[0]=='w':
         operation='write'
-    elif opr=='e':
+        transaction_num = opr[1]
+        item = opr[3]
+    elif opr[0]=='e':
         operation='end'
-    else:
-        operation='invalid operation'
-    return operation
+        transaction_num = opr[1]
+
+    return operation,transaction_num,item
 def checkchar(input):
-    operations=input.split("\n")
+    input_ops=input.split("\n")
     operation=[]
-    for i in operations:
-        operation.append(checkoperation(i[0]))
+
+    for n,i in enumerate(input_ops):
+        temp_clean=i.replace(" ","")
+        input_ops[n]=temp_clean
+
+
+    for i in input_ops:
+        operation.append(checkoperation(i))
     print(operation)
 
 
