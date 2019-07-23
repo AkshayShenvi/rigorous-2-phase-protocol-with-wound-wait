@@ -1,7 +1,10 @@
+
 transaction_list = []
 locks_dict = {}
 
-def checkoperation(opr):
+
+def check_operation(opr):
+
     operation = 'invalid'
     transaction_num = 'invalid'
     item=None
@@ -22,17 +25,19 @@ def checkoperation(opr):
 
     return operation,transaction_num,item
 
-def checkchar(input):
+def clean_input(input):
     input_ops=input.split("\n")
     operation=[]
 
-    for n, i in enumerate(input_ops):
-        temp_clean = i.replace(" ","")
-        input_ops[n] = temp_clean
+    for n,i in enumerate(input_ops):
+        temp_clean=i.replace(" ","")
+        input_ops[n]=temp_clean
+        operation.append(check_operation(i))
 
-    for i in input_ops:
-        operation.append(checkoperation(i))
-    print(operation)
+
+
+
+    return operation
 
     for op in operation:
         if op[0] == 'begin':
@@ -51,8 +56,10 @@ def begin(transaction_id):
 
 
 if __name__=='__main__':
+    operation_list=[]
+
     file=open("input.txt","r+")
     input=file.read()
-    checkchar(input)
+    operation_list=clean_input(input)
     file.close()
 
