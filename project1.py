@@ -6,6 +6,8 @@ transaction_table = pd.DataFrame(columns=["transaction_id", "timestamp", "state"
 wait_list = []
 output_list=[]
 
+in_waitlist = False
+
 def checkoperation(opr):
     operation = 'invalid'
     transaction_num = 'invalid'
@@ -265,7 +267,8 @@ def end(transaction_id):
         transaction_index = transaction_table[transaction_table["transaction_id"] == transaction_id].index
         transaction_table.at[transaction_index, 'state'] = "completed"
 
-        # run_wait_list()
+        if not in_waitlist:
+            run_wait_list()
 
         return True
 
@@ -305,6 +308,9 @@ def end(transaction_id):
 
 def wound_wait(requesting_transaction_id, locking_transaction_id):
 
+    global transaction_table
+    global lock_table
+
     # get transactions having lock
     requesting_transaction = transaction_table[transaction_table["transaction_id"] == requesting_transaction_id]
     locking_transaction = transaction_table[transaction_table["transaction_id"] == locking_transaction_id]
@@ -331,12 +337,16 @@ def wound_wait(requesting_transaction_id, locking_transaction_id):
         lock_table = lock_table[lock_table["transaction_id"] != locking_transaction_id]
 
         # check if wait-listed operations can be executed
-        run_wait_list()
+        if not in_waitlist:
+            run_wait_list()
 
 
 def run_wait_list():
     global transaction_table
     global wait_list
+    global in_waitlist
+
+    in_waitlist = True
 
     print('----------------------------------------')
     print('Start waitlisted operations:')
@@ -366,12 +376,15 @@ def run_wait_list():
         elif op[0] == 'end':
             if not end(int(op[1])):
                 break
+
+    in_waitlist = False
+
     print('End waitlisted operations:')
     print('----------------------------------------')
 
 if __name__=='__main__':
     output_list
-    file=open("input2.txt","r+")
+    file=open("input3.txt","r+")
     input=file.read()
     input_ops = checkchar(input)
 
@@ -387,7 +400,8 @@ if __name__=='__main__':
         elif op[0] == 'end':
             end(int(op[1]))
 
-    run_wait_list()
+    if not in_waitlist:
+        run_wait_list()
     
     print()        
     print("transaction_table: ")
@@ -401,8 +415,8 @@ if __name__=='__main__':
     print("wait_list: ")
     print(wait_list)
     lines=[]
-    # for i in range(len(output_list)):
-    #     lines.append(input_ops[i]+":"+output_list[i])
+    for i in range(len(output_list)):
+        lines.append(input_ops[i]+":"+output_list[i])
     final_string = '\n'.join(lines)
     print(lines)
     # # print( transaction_table[(transaction_table["transaction_id"] > 1) & (transaction_table["timestamp"] < 3)] )
