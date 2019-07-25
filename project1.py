@@ -75,9 +75,7 @@ def read(transaction_id, data_item):
                 & (lock_table["transaction_id"] != transaction_id)]) > 0:
             
             # append to output file
-            output = "Transaction " + str(transaction_id) + ": requesting write lock on " + data_item + ": wound wait"
-            print(output)
-            output_list.append(output)
+
 
             # get conflicting lock
             conflicting_lock = lock_table[(lock_table["transaction_id"] != transaction_id) & (lock_table["data_item"] == data_item)]
@@ -86,9 +84,16 @@ def read(transaction_id, data_item):
             conflicting_transaction_id = conflicting_lock["transaction_id"].values[0]
 
             # wound wait
-            wound_wait(transaction_id, conflicting_transaction_id)
+            output1=wound_wait(transaction_id, conflicting_transaction_id)
+
+
+            # append to output file
+            output="Transaction " + str(transaction_id) + ": wound wait :"+output1
+            print(output)
+            output_list.append(output)
 
             return False
+
         
         # exclusive lock by self, read
         elif len(lock_table[(lock_table["data_item"] == data_item) 
@@ -173,9 +178,9 @@ def write(transaction_id, data_item):
         if len(lock_table[(lock_table["data_item"] == data_item) 
                 & (lock_table["transaction_id"] != transaction_id)]) > 0:
 
-            output="Transaction " + str(transaction_id) + ": requesting write lock on " + data_item + ": wound wait"
-            print(output)
-            output_list.append(output)
+
+
+
 
             # get conflicting lock
             conflicting_lock = lock_table[(lock_table["transaction_id"] != transaction_id) & (lock_table["data_item"] == data_item)]
@@ -183,9 +188,16 @@ def write(transaction_id, data_item):
             # get conflcting transaction
             conflicting_transaction_id = conflicting_lock["transaction_id"].values[0]
 
-            wound_wait(transaction_id, conflicting_transaction_id)
+
+            output1=wound_wait(transaction_id, conflicting_transaction_id)
+            output = "Transaction " + str(transaction_id) + ": requesting write lock on " + data_item + ": wound wait : "+output1
+            print(output)
+            output_list.append(output)
+
+
             
             return False
+
 
         # exclusive lock by self, write
         elif len(lock_table[(lock_table["data_item"] == data_item)
@@ -320,6 +332,7 @@ def wound_wait(requesting_transaction_id, locking_transaction_id):
     requesting_timestamp = transaction_table[transaction_table["transaction_id"] == requesting_transaction_id]["timestamp"].values[0]
 
     if (requesting_timestamp > locking_timestamp):
+        output='wait requesting transaction ' + str(requesting_timestamp)
         print('wait requesting transaction ' + str(requesting_timestamp))
 
         # set status of requesting transaction to 'waiting'
@@ -327,6 +340,7 @@ def wound_wait(requesting_transaction_id, locking_transaction_id):
         transaction_table.at[requesting_transaction_index, "state"] = "waiting"
 
     else:
+        output='abort locking transaction ' + str(locking_timestamp)
         print('abort locking transaction ' + str(locking_timestamp))
 
         # set status of locking transaction to 'aborted'
@@ -339,6 +353,8 @@ def wound_wait(requesting_transaction_id, locking_transaction_id):
         # check if wait-listed operations can be executed
         if not in_waitlist:
             run_wait_list()
+
+    return output
 
 
 def run_wait_list():
@@ -415,10 +431,16 @@ if __name__=='__main__':
     print("wait_list: ")
     print(wait_list)
     lines=[]
+
+    print(len(input_ops))
+    print(len(output_list))
     for i in range(len(output_list)):
         lines.append(input_ops[i]+":"+output_list[i])
     final_string = '\n'.join(lines)
-    print(lines)
+    print(final_string)
+    with open('output.txt', 'w') as f:
+        for item in lines:
+            f.write("%s\n" % item)
     # # print( transaction_table[(transaction_table["transaction_id"] > 1) & (transaction_table["timestamp"] < 3)] )
     # print('detete transaction 1')
     # print(transaction_table[transaction_table["transaction_id"] == 1].index)
