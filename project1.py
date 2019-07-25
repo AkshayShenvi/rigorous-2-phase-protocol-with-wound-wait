@@ -1,12 +1,11 @@
-import queue
-transaction_table = {}
-locks_table = {}
-counter=0
-waiting_list=[]
+import pandas as pd
 
+timestamp = 0
+lock_table = pd.DataFrame(columns=["transaction_id", "data_item", "state"])
+transaction_table = pd.DataFrame(columns=["transaction_id", "timestamp", "state"])
+wait_list = []
 
-def check_operation(opr):
-
+def checkoperation(opr):
     operation = 'invalid'
     transaction_num = 'invalid'
     item=None
@@ -26,70 +25,217 @@ def check_operation(opr):
         transaction_num = opr[1]
 
     return operation,transaction_num,item
-
-def clean_input(input):
+def checkchar(input):
     input_ops=input.split("\n")
     operation=[]
 
     for n,i in enumerate(input_ops):
         temp_clean=i.replace(" ","")
         input_ops[n]=temp_clean
-        operation.append(check_operation(i))
-    return operation
 
-def read(item,t_id):
-    if item in locks_table:
-        lock_info=locks_table[item]
-        if t_id in lock_info['t_id_waiting']:
-            # waiting_list.append('r'+)
 
+    for i in input_ops:
+        operation.append(checkoperation(i))
+
+    return input_ops;
+
+
+def begin(transaction_id):
+    global timestamp
+    global transaction_table
+    global lock_table
+
+    print("Transaction " + str(transaction_id) + ": start")
+
+    # increment transaction timestamp
+    timestamp = timestamp + 1
+
+    # add transaction to transaction table
+    row = {"transaction_id": transaction_id, "timestamp": timestamp, "state": "active"}
+    transaction_table = transaction_table.append(row, ignore_index=True)
+
+
+def read(transaction_id, data_item):
+
+    global timestamp
+    global transaction_table
+    global lock_table
+
+    # current transaction is active
+    if transaction_table[transaction_table["transaction_id"] == transaction_id]["state"].values[0] == "active":
+        
+        # exclusive lock by another transaction, wound wait
+        if len(lock_table[(lock_table["data_item"] == data_item) 
+            & (lock_table["transaction_id"] != transaction_id)  
+            & (lock_table["state"] == "write")]) > 0:
+            
+            print("Transaction " + str(transaction_id) + ": wound wait")
+        
+        # exclusive lock by self, read
+        elif len(lock_table[(lock_table["data_item"] == data_item) 
+            & (lock_table["transaction_id"] == transaction_id) 
+            & (lock_table["state"] == 'write')]) > 0:
+            
+            print("Transaction " + str(transaction_id) + ": read " + data_item)
+        
+        # shared lock by self, read
+        elif len(lock_table[(lock_table["data_item"] == data_item) 
+            & (lock_table["transaction_id"] == transaction_id) 
+            & (lock_table["state"] == "read")]) > 0:
+            
+            print("Transaction " + str(transaction_id) + ": read " + data_item)
+        
+        # no exclusive lock, okay to lock and read
+        else:
+            
+            print("Transaction " + str(transaction_id) + ": acquire read lock on " + data_item)
+
+            # add lock to lock table
+            lock = {"transaction_id": transaction_id, "data_item": data_item, "state": "read"}
+            lock_table = lock_table.append(lock, ignore_index=True)
+
+    # current transaction is waiting
+    elif transaction_table[transaction_table["transaction_id"] == transaction_id]["state"].values[0] == "waiting":
+        print("Transaction " + transaction_id + " is waiting, added operation to waiting list")
+        wait_list.append(('read', transaction_id, data_item))
+    
+    # current transaction is aborted
+    elif transaction_table[transaction_table["transaction_id"] == transaction_id]["state"].values[0] == "aborted":
+        print("Transaction " + transaction_id + " is aborted")
+    
+    # current transaction is completed
+    elif transaction_table[transaction_table["transaction_id"] == transaction_id]["state"].values[0] == "completed":
+        print("Transaction " + transaction_id + " is completed")
+
+    # current transaction has invalid state
+    else:
+        print("Transaction " + transaction_id + " state is invalid")
+
+
+def write(transaction_id, data_item):
+
+    global timestamp
+    global transaction_table
+    global lock_table
+
+    # current transaction is active
+    if transaction_table[transaction_table["transaction_id"] == transaction_id]["state"].values[0] == "active":
+        
+        # lock by another transaction, wound wait
+        if len(lock_table[(lock_table["data_item"] == data_item) 
+                & (lock_table["transaction_id"] != transaction_id)]) > 0:
+            
+            print("Transaction " + str(transaction_id) + ": requesting write lock on " + data_item + ": wound wait")
+
+            # get conflicting lock
+            conflicting_lock = lock_table[(lock_table["transaction_id"] != transaction_id) & (lock_table["data_item"] == data_item)]
+
+            # get conflcting transaction
+            conflicting_transaction_id = conflicting_lock["transaction_id"].values[0]
+            
+
+        # exclusive lock by self, write
+        elif len(lock_table[(lock_table["data_item"] == data_item)
+                & (lock_table["transaction_id"] == transaction_id)
+                & (lock_table["state"] == "write")]) > 0:
+            
+            print("Transaction " + str(transaction_id) + ": write " + data_item)
+        
+        # no exclusive lock, okay to lock and write
         else:
 
+            print("Transaction " + str(transaction_id) + ": acquire write lock on " + data_item)
 
+            # 
+            lock_index = lock_table[(lock_table["transaction_id"] == transaction_id) & (lock_table["data_item"] == data_item)].index
+            lock_table.at[lock_index, "state"] = "write"
+
+    # current transaction is waiting
+    elif transaction_table[transaction_table["transaction_id"] == transaction_id]["state"].values[0] == "waiting":
+        print("Transaction " + transaction_id + " is waiting, added operation to waiting list")
+
+        # add to wait_list
+        wait_list.append(('read', transaction_id, data_item))
+    
+    # current transaction is aborted
+    elif transaction_table[transaction_table["transaction_id"] == transaction_id]["state"].values[0] == "aborted":
+        print("Transaction " + transaction_id + " is aborted")
+    
+    # current transaction is completed
+    elif transaction_table[transaction_table["transaction_id"] == transaction_id]["state"].values[0] == "completed":
+        print("Transaction " + transaction_id + " is completed")
+
+    # current transaction has invalid state
     else:
-        new_item={}
-        new_item['state']='read'
-        new_item['t_id_holding']=[]
-        new_item['t_id_waiting']=[]
-        new_item['t_id_holding'].append(t_id)
-        locks_table[item]=new_item
+        print("Transaction " + transaction_id + " state is invalid")
+
+
+def end(transaction_id):
+    global timestamp
+    global transaction_table
+    global lock_table
+
+    # current transaction is active
+    if transaction_table[transaction_table["transaction_id"] == transaction_id]["state"].values[0] == "active":
+        print("Transaction " + str(transaction_id) + ": end")
         
+        # release all locks held by the transaction
+        locks_to_release = lock_table[lock_table["transaction_id"] == transaction_id]
+        
+        # print("locks to release: " + str(locks_to_release))
+        lock_table = lock_table[lock_table["transaction_id"] != transaction_id]
 
-def write(item,t_id):
-
-def begin(transaction_id,counter):
-    new_transaction = {}
-
-    new_transaction['timestamp'] = counter
-    new_transaction['state'] = 'active'
-    new_transaction['locked_items'] = []
-
-    transaction_table[transaction_id]=new_transaction
+        # change status of transaction to completed
+        transaction_index = transaction_table[transaction_table["transaction_id"] == transaction_id].index
+        transaction_table.at[transaction_index, 'state'] = "completed"
 
 
+def wound_wait(reqesting_transaction_id, locking_transaction_id):
+
+    # get transaction having lock
+    locking_transaction = transaction_table[transaction_table["transaction_id"] == locking_transaction_id]
+    print("Locking Transaction: ")
+    print(str(conflicting_transaction))
+
+    locking_timestamp = transaction_table[transaction_table["transaction_id"] == transaction_id]["timestamp"].values[0]
+    requesting_timestamp = conflicting_transaction["timestamp"].values[0]
+
+    print(str(locking_timestamp) + ", " + str(requesting_timestamp))
 
 
 if __name__=='__main__':
-    operation_list=[]
-
-    file=open("input.txt","r+")
+    file=open("input2.txt","r+")
     input=file.read()
-    operation_list=clean_input(input)
-    print(operation_list)
-    for op in operation_list:
+    input_ops = checkchar(input)
+
+    for op in input_ops:
+        op = checkoperation(op)
+
         if op[0] == 'begin':
-            counter+=1
-            begin(op[1],counter)
-            print(transaction_table)
-            print(locks_table)
-        if op[0] == 'read':
-            read(op[2],op[1])
-            print(transaction_table)
-            print(locks_table)
-        if op[0] == 'end':
-            #check holding locks
-            #try to execute waiting_lock of that item on which ended transaction had a holding lock.
-            #release all locks
-            print("end")
+            begin(int(op[1]))
+        elif op[0] == 'read':
+            read(int(op[1]), op[2])
+        elif op[0] == 'write':
+            write(int(op[1]), op[2])
+        elif op[0] == 'end':
+            end(int(op[1]))
+    
+    print()        
+    print("transaction_table: ")
+    print(transaction_table)
+    
+    print()
+    print("lock_table: ")
+    print(lock_table)
+    
+    print()
+    print("wait_list: ")
+    print(wait_list)
+    
+    # # print( transaction_table[(transaction_table["transaction_id"] > 1) & (transaction_table["timestamp"] < 3)] )
+    # print('detete transaction 1')
+    # print(transaction_table[transaction_table["transaction_id"] == 1].index)
+    # print(transaction_table)
+
     file.close()
 
