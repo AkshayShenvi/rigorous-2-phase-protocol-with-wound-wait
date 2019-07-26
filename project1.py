@@ -1,5 +1,7 @@
 import pandas as pd
 
+input_file = 'input.txt'
+
 timestamp = 0
 lock_table = pd.DataFrame(columns=["transaction_id", "data_item", "state"])
 transaction_table = pd.DataFrame(columns=["transaction_id", "timestamp", "state"])
@@ -48,9 +50,14 @@ def begin(transaction_id):
     global transaction_table
     global lock_table
     global output_list
-    output="b"+str(transaction_id)+":;"+"Transaction " + str(transaction_id) + ": start"
+
+    # append to output file
+    output = "b" + str(transaction_id) + ";     :" + "Transaction " + str(transaction_id) + ": start"
+    if in_waitlist:
+        output = output + ' (from waitlist)'
     print(output)
     output_list.append(output)
+
     # increment transaction timestamp
     timestamp = timestamp + 1
 
@@ -66,6 +73,7 @@ def read(transaction_id, data_item):
     global lock_table
     global wait_list
     global output_list
+    global in_waitlist
 
     # current transaction is active
     if transaction_table[transaction_table["transaction_id"] == transaction_id]["state"].values[0] == "active":
@@ -73,9 +81,6 @@ def read(transaction_id, data_item):
         # exclusive lock by another transaction, wound wait
         if len(lock_table[(lock_table["data_item"] == data_item) 
                 & (lock_table["transaction_id"] != transaction_id)]) > 0:
-            
-            # append to output file
-
 
             # get conflicting lock
             conflicting_lock = lock_table[(lock_table["transaction_id"] != transaction_id) & (lock_table["data_item"] == data_item)]
@@ -84,13 +89,39 @@ def read(transaction_id, data_item):
             conflicting_transaction_id = conflicting_lock["transaction_id"].values[0]
 
             # wound wait
-            output1=wound_wait(transaction_id, conflicting_transaction_id)
+            wound_wait_result = wound_wait(transaction_id, conflicting_transaction_id)
 
+            # apply read lock to requesting transaction if locking transaction is aborted
+            message = ""
+            if wound_wait_result == 'abort':
+
+                # release all locks held by the transaction
+                locks_to_release = lock_table[lock_table["transaction_id"] == transaction_id]
+
+                # apply read lock
+                lock = {"transaction_id": transaction_id, "data_item": data_item, "state": "read"}
+                lock_table = lock_table.append(lock, ignore_index=True)
+
+                # set message string
+                message = "Abort Transaction " + str(conflicting_transaction_id) + " and release locks on " + str(locks_to_release["data_item"].values)[1:-1] + ", acquire read lock on " + data_item
+            else:
+
+                # add blocked operation to wait_list
+                wait_list.append(("read", transaction_id, data_item))
+
+                # set message string
+                message = "Block Transaction " + str(transaction_id) + ", add operation to wait list"
 
             # append to output file
-            output="r"+str(transaction_id)+"("+data_item+");:"+"Transaction " + str(transaction_id) + ": wound wait :"+output1
+            output = "r" + str(transaction_id) + "(" + data_item + ");  :Transaction " + str(transaction_id) + ": Requesting read lock on " + data_item + " : wound wait : " + message
+            if in_waitlist:
+                output = output + ' (from waitlist)'
             print(output)
             output_list.append(output)
+
+            # run waitlisted transactions if aborted
+            if wound_wait_result == 'abort':
+                run_wait_list()
 
             return False
 
@@ -100,7 +131,10 @@ def read(transaction_id, data_item):
             & (lock_table["transaction_id"] == transaction_id) 
             & (lock_table["state"] == 'write')]) > 0:
 
-            output ="r"+str(transaction_id)+"("+data_item+");:"+"Transaction " + str(transaction_id) + ": read " + data_item
+            # append to output file
+            output = "r" + str(transaction_id) + "(" + data_item + ");  :Transaction " + str(transaction_id) + ": read " + data_item
+            if in_waitlist:
+                output = output + ' (from waitlist)'
             print(output)
             output_list.append(output)
 
@@ -111,7 +145,10 @@ def read(transaction_id, data_item):
             & (lock_table["transaction_id"] == transaction_id) 
             & (lock_table["state"] == "read")]) > 0:
 
-            output = "r"+str(transaction_id)+"("+data_item+");:"+"Transaction " + str(transaction_id) + ": read " + data_item
+            # append to output file
+            output = "r" + str(transaction_id) + "(" + data_item + ");  :Transaction " + str(transaction_id) + ": read " + data_item
+            if in_waitlist:
+                output = output + ' (from waitlist)'
             print(output)
             output_list.append(output)
 
@@ -119,7 +156,11 @@ def read(transaction_id, data_item):
         
         # no exclusive lock, okay to lock and read
         else:
-            output="r"+str(transaction_id)+"("+data_item+");:"+"Transaction " + str(transaction_id) + ": acquire read lock on " + data_item
+
+            # append to output file
+            output = "r" + str(transaction_id) + "(" + data_item + ");  :" + "Transaction " + str(transaction_id) + ": acquire read lock on " + data_item
+            if in_waitlist:
+                output = output + ' (from waitlist)'
             print(output)
             output_list.append(output)
 
@@ -131,16 +172,26 @@ def read(transaction_id, data_item):
 
     # current transaction is waiting
     elif transaction_table[transaction_table["transaction_id"] == transaction_id]["state"].values[0] == "waiting":
-        output="r"+str(transaction_id)+"("+data_item+");:"+"Transaction " + transaction_id + " is waiting, added operation to waiting list"
+        
+        # append to output file
+        output = "r" + str(transaction_id) + "(" + data_item + ");  :Transaction " + str(transaction_id) + ": waiting, added operation to waiting list"
+        if in_waitlist:
+            output = output + ' (from waitlist)'
         print(output)
         output_list.append(output)
+
+        # add operation to wait_list
         wait_list.append(('read', transaction_id, data_item))
 
         return False
     
     # current transaction is aborted
     elif transaction_table[transaction_table["transaction_id"] == transaction_id]["state"].values[0] == "aborted":
-        output = "r"+str(transaction_id)+"("+data_item+");:"+"Transaction " + str(transaction_id) + " is aborted"
+        
+        # append to output file
+        output = "r" + str(transaction_id) + "(" + data_item + ");  :Transaction " + str(transaction_id) + " is aborted"
+        if in_waitlist:
+            output = output + ' (from waitlist)'
         print(output)
         output_list.append(output)
 
@@ -148,7 +199,11 @@ def read(transaction_id, data_item):
     
     # current transaction is completed
     elif transaction_table[transaction_table["transaction_id"] == transaction_id]["state"].values[0] == "completed":
-        output = "r"+str(transaction_id)+"("+data_item+");:"+"Transaction " + str(transaction_id) + " is completed"
+        
+        # append to output file
+        output = "r" + str(transaction_id) + "(" + data_item + ");  :Transaction " + str(transaction_id) + " is completed"
+        if in_waitlist:
+            output = output + ' (from waitlist)'
         print(output)
         output_list.append(output)
 
@@ -156,7 +211,11 @@ def read(transaction_id, data_item):
 
     # current transaction has invalid state
     else:
-        output ="r"+str(transaction_id)+"("+data_item+");:"+"Transaction " + str(transaction_id) + " state is invalid"
+
+        # append to output file
+        output = "r" + str(transaction_id) + "(" + data_item + ");  :Transaction " + str(transaction_id) + " state is invalid"
+        if in_waitlist:
+            output = output + ' (from waitlist)'
         print(output)
         output_list.append(output)
 
@@ -170,6 +229,7 @@ def write(transaction_id, data_item):
     global lock_table
     global wait_list
     global output_list
+    global in_waitlist
 
     # current transaction is active
     if transaction_table[transaction_table["transaction_id"] == transaction_id]["state"].values[0] == "active":
@@ -178,32 +238,62 @@ def write(transaction_id, data_item):
         if len(lock_table[(lock_table["data_item"] == data_item) 
                 & (lock_table["transaction_id"] != transaction_id)]) > 0:
 
-
-
-
-
             # get conflicting lock
             conflicting_lock = lock_table[(lock_table["transaction_id"] != transaction_id) & (lock_table["data_item"] == data_item)]
 
             # get conflcting transaction
             conflicting_transaction_id = conflicting_lock["transaction_id"].values[0]
 
+            wound_wait_result = wound_wait(transaction_id, conflicting_transaction_id)
 
-            output1=wound_wait(transaction_id, conflicting_transaction_id)
-            output ="w"+str(transaction_id)+"("+data_item+");:"+"Transaction " + str(transaction_id) + ": requesting write lock on " + data_item + ": wound wait : "+output1
+            # apply read lock to requesting transaction if locking transaction is aborted
+            message = ""
+            if wound_wait_result == 'abort':
+
+                # release all locks held by the transaction
+                locks_to_release = lock_table[lock_table["transaction_id"] == transaction_id]
+
+                # apply write lock
+                lock_index = lock_table[(lock_table["transaction_id"] == transaction_id) & (lock_table["data_item"] == data_item)].index
+                if len(lock_index.values) == 0:
+                    # dirty write
+                    lock = {"transaction_id": transaction_id, "data_item": data_item, "state": "write"}
+                    lock_table = lock_table.append(lock, ignore_index=True)
+                else:
+                    lock_table.at[lock_index, "state"] = "write"
+
+                # set message string
+                message = "Abort Transaction " + str(conflicting_transaction_id) + " and release locks on " + str(locks_to_release["data_item"].values)[1:-1] + ", acquire write lock on " + data_item
+            else:
+                
+                # add blocked operation to wait_list
+                wait_list.append(("read", transaction_id, data_item))
+
+                # set message string
+                message = "Block Transaction " + str(transaction_id) + ", add operation to wait list"
+
+            # append to output file
+            output = "w" + str(transaction_id) + "(" + data_item + ");  :Transaction " + str(transaction_id) + ": Requesting write lock on " + data_item + ": wound wait : " + message
+            if in_waitlist:
+                output = output + ' (from waitlist)'
             print(output)
             output_list.append(output)
 
+            # run waitlisted transactions if aborted
+            if wound_wait_result == 'abort':
+                run_wait_list()
 
-            
             return False
-
 
         # exclusive lock by self, write
         elif len(lock_table[(lock_table["data_item"] == data_item)
                 & (lock_table["transaction_id"] == transaction_id)
                 & (lock_table["state"] == "write")]) > 0:
-            output="w"+str(transaction_id)+"("+data_item+");:"+"Transaction " + str(transaction_id) + ": write " + data_item
+            
+            # append to output file
+            output = "w" + str(transaction_id) + "(" + data_item + ");  :Transaction " + str(transaction_id) + ": write " + data_item
+            if in_waitlist:
+                output = output + ' (from waitlist)'
             print(output)
             output_list.append(output)
 
@@ -211,19 +301,32 @@ def write(transaction_id, data_item):
         
         # no exclusive lock, okay to lock and write
         else:
-            output="w"+str(transaction_id)+"("+data_item+");:"+"Transaction " + str(transaction_id) + ": acquire write lock on " + data_item
+
+            # append to output file
+            output = "w" + str(transaction_id) + "(" + data_item + ");  :Transaction " + str(transaction_id) + ": acquire write lock on " + data_item
+            if in_waitlist:
+                output = output + ' (from waitlist)'
             print(output)
             output_list.append(output)
 
-            # 
+            # apply write lock
             lock_index = lock_table[(lock_table["transaction_id"] == transaction_id) & (lock_table["data_item"] == data_item)].index
-            lock_table.at[lock_index, "state"] = "write"
+            if len(lock_index.values) == 0:
+                # dirty write
+                lock = {"transaction_id": transaction_id, "data_item": data_item, "state": "write"}
+                lock_table = lock_table.append(lock, ignore_index=True)
+            else:
+                lock_table.at[lock_index, "state"] = "write"
 
             return True
 
     # current transaction is waiting
     elif transaction_table[transaction_table["transaction_id"] == transaction_id]["state"].values[0] == "waiting":
-        output = "w"+str(transaction_id)+"("+data_item+");:"+"Transaction " + str(transaction_id) + " is waiting, added operation to waiting list"
+        
+        # append to output file
+        output = "w" + str(transaction_id) + "(" + data_item + ");  :Transaction " + str(transaction_id) + ": waiting, added operation to waiting list"
+        if in_waitlist:
+            output = output + ' (from waitlist)'
         print(output)
         output_list.append(output)
 
@@ -234,7 +337,11 @@ def write(transaction_id, data_item):
     
     # current transaction is aborted
     elif transaction_table[transaction_table["transaction_id"] == transaction_id]["state"].values[0] == "aborted":
-        output = "w"+str(transaction_id)+"("+data_item+");:"+"Transaction " + str(transaction_id) + " is aborted"
+        
+        # append to output file
+        output = "w" + str(transaction_id) + "(" + data_item + ");  :Transaction " + str(transaction_id) + " is aborted"
+        if in_waitlist:
+            output = output + ' (from waitlist)'
         print(output)
         output_list.append(output)
 
@@ -242,7 +349,11 @@ def write(transaction_id, data_item):
     
     # current transaction is completed
     elif transaction_table[transaction_table["transaction_id"] == transaction_id]["state"].values[0] == "completed":
-        output = "w"+str(transaction_id)+"("+data_item+");:"+"Transaction " + str(transaction_id) + " is completed"
+        
+        # append to output file
+        output = "w" + str(transaction_id) + "(" + data_item + ");  :Transaction " + str(transaction_id) + " is completed"
+        if in_waitlist:
+            output = output + ' (from waitlist)'
         print(output)
         output_list.append(output)
 
@@ -250,7 +361,11 @@ def write(transaction_id, data_item):
 
     # current transaction has invalid state
     else:
-        output = "w"+str(transaction_id)+"("+data_item+");:"+"Transaction " + str(transaction_id) + " state is invalid"
+
+        # append to output file
+        output = "w" + str(transaction_id) + "(" + data_item + ");  :Transaction " + str(transaction_id) + " state is invalid"
+        if in_waitlist:
+            output = output + ' (from waitlist)'
         print(output)
         output_list.append(output)
 
@@ -265,9 +380,6 @@ def end(transaction_id):
 
     # current transaction is active
     if transaction_table[transaction_table["transaction_id"] == transaction_id]["state"].values[0] == "active":
-        output="e"+str(transaction_id)+";:Transaction " + str(transaction_id) + ": end"
-        print(output)
-        output_list.append(output)
         
         # release all locks held by the transaction
         locks_to_release = lock_table[lock_table["transaction_id"] == transaction_id]
@@ -275,18 +387,30 @@ def end(transaction_id):
         # print("locks to release: " + str(locks_to_release))
         lock_table = lock_table[lock_table["transaction_id"] != transaction_id]
 
+        # append to output file
+        output="e" + str(transaction_id) + ";     :Transaction " + str(transaction_id) + ": end, release locks on " + str(locks_to_release["data_item"].values)[1:-1]
+        if in_waitlist:
+            output = output + ' (from waitlist)'
+        print(output)
+        output_list.append(output)
+
         # change status of transaction to completed
         transaction_index = transaction_table[transaction_table["transaction_id"] == transaction_id].index
         transaction_table.at[transaction_index, 'state'] = "completed"
 
-        if not in_waitlist:
-            run_wait_list()
+        run_wait_list()
 
         return True
 
     # current transaction is waiting
     elif transaction_table[transaction_table["transaction_id"] == transaction_id]["state"].values[0] == "waiting":
-        print("Transaction " + str(transaction_id) + " is waiting, added operation to waiting list")
+        
+        # append to output file
+        output = "e" + str(transaction_id) + ";     :Transaction " + str(transaction_id) + ": waiting, added operation to waiting list"
+        if in_waitlist:
+            output = output + ' (from waitlist)'
+        print(output)
+        output_list.append(output)
 
         # add to wait_list
         wait_list.append(('end', transaction_id))
@@ -295,7 +419,11 @@ def end(transaction_id):
     
     # current transaction is aborted
     elif transaction_table[transaction_table["transaction_id"] == transaction_id]["state"].values[0] == "aborted":
-        output = "e"+str(transaction_id)+";:Transaction " + str(transaction_id) + " is aborted"
+        
+        # append to output file
+        output = "e" + str(transaction_id) + ";     :Transaction " + str(transaction_id) + " is aborted"
+        if in_waitlist:
+            output = output + ' (from waitlist)'
         print(output)
         output_list.append(output)
 
@@ -303,7 +431,11 @@ def end(transaction_id):
     
     # current transaction is completed
     elif transaction_table[transaction_table["transaction_id"] == transaction_id]["state"].values[0] == "completed":
-        output = "e"+str(transaction_id)+";:Transaction " + str(transaction_id) + " is completed"
+        
+        # append to output file
+        output = "e" + str(transaction_id) + ";  :Transaction " + str(transaction_id) + " is completed"
+        if in_waitlist:
+            output = output + ' (from waitlist)'
         print(output)
         output_list.append(output)
 
@@ -311,7 +443,11 @@ def end(transaction_id):
 
     # current transaction has invalid state
     else:
-        output = "e"+str(transaction_id)+";:Transaction " + str(transaction_id) + " state is invalid"
+
+        # append to output file
+        output = "e" + str(transaction_id) + ";  :Transaction " + str(transaction_id) + " state is invalid"
+        if in_waitlist:
+            output = output + ' (from waitlist)'
         print(output)
         output_list.append(output)
 
@@ -332,27 +468,21 @@ def wound_wait(requesting_transaction_id, locking_transaction_id):
     requesting_timestamp = transaction_table[transaction_table["transaction_id"] == requesting_transaction_id]["timestamp"].values[0]
 
     if (requesting_timestamp > locking_timestamp):
-        output='wait requesting transaction ' + str(requesting_timestamp)
-        print('wait requesting transaction ' + str(requesting_timestamp))
+        output = 'wait'
 
         # set status of requesting transaction to 'waiting'
         requesting_transaction_index = requesting_transaction.index
         transaction_table.at[requesting_transaction_index, "state"] = "waiting"
 
     else:
-        output='abort locking transaction ' + str(locking_timestamp)
-        print('abort locking transaction ' + str(locking_timestamp))
+        output = 'abort'
 
         # set status of locking transaction to 'aborted'
         locking_transaction_index = locking_transaction.index
-        transaction_table.at[requesting_transaction_index, "state"] = "aborted"
+        transaction_table.at[locking_transaction_index, "state"] = "aborted"
 
         # release locks
         lock_table = lock_table[lock_table["transaction_id"] != locking_transaction_id]
-
-        # check if wait-listed operations can be executed
-        if not in_waitlist:
-            run_wait_list()
 
     return output
 
@@ -362,15 +492,19 @@ def run_wait_list():
     global wait_list
     global in_waitlist
 
+    # return if wait list operations already being executed, or if waitlist is already empty
+    if in_waitlist or len(wait_list) == 0:
+        return
+
     in_waitlist = True
 
-    print('----------------------------------------')
-    print('Start waitlisted operations:')
+    # print('----------------------------------------')
+    # print('Start waitlisted operations:')
     # loop through wait_list
 
     while True:
-        print(str(wait_list))
 
+        # break if wait_list is empty
         if len(wait_list) == 0:
             break
 
@@ -378,7 +512,12 @@ def run_wait_list():
         wait_list = wait_list[1:]
 
         transaction_index = transaction_table[transaction_table["transaction_id"] == int(op[1])].index
-        transaction_table.at[transaction_index, "state"] = "active"
+        
+        # check if waitlisted operation is not aborted
+        if transaction_table.iloc[transaction_index]["state"].values[0] != 'aborted':
+            transaction_table.at[transaction_index, "state"] = "active"
+        else:
+            continue
 
         if op[0] == 'begin':
             if not begin(int(op[1])):
@@ -395,12 +534,12 @@ def run_wait_list():
 
     in_waitlist = False
 
-    print('End waitlisted operations:')
-    print('----------------------------------------')
+    # print('End waitlisted operations:')
+    # print('----------------------------------------')
 
 if __name__=='__main__':
     output_list
-    file=open("input3.txt","r+")
+    file=open(input_file, "r+")
     input=file.read()
     input_ops = checkchar(input)
 
@@ -416,8 +555,8 @@ if __name__=='__main__':
         elif op[0] == 'end':
             end(int(op[1]))
 
-    if not in_waitlist:
-        run_wait_list()
+    # execute any operations if remaining
+    run_wait_list()
     
     print()        
     print("transaction_table: ")
