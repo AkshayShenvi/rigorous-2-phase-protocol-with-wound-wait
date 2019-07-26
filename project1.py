@@ -1,6 +1,7 @@
 import pandas as pd
 
-input_file = 'input.txt'
+input_file = "input6.txt"
+output_file = "output_" + input_file
 
 timestamp = 0
 lock_table = pd.DataFrame(columns=["transaction_id", "data_item", "state"])
@@ -80,6 +81,7 @@ def read(transaction_id, data_item):
         
         # exclusive lock by another transaction, wound wait
         if len(lock_table[(lock_table["data_item"] == data_item) 
+                & (lock_table["state"] == "write")
                 & (lock_table["transaction_id"] != transaction_id)]) > 0:
 
             # get conflicting lock
@@ -269,7 +271,7 @@ def write(transaction_id, data_item):
             else:
                 
                 # add blocked operation to wait_list
-                wait_list.append(("read", transaction_id, data_item))
+                wait_list.append(("write", transaction_id, data_item))
 
                 # set message string
                 message = "Block Transaction " + str(transaction_id) + ", add operation to wait list"
@@ -505,8 +507,11 @@ def run_wait_list():
         if len(wait_list) == 0:
             break
 
+        wait_list_copy = wait_list
         op = wait_list[0]
         wait_list = wait_list[1:]
+
+        wait_list_copy = wait_list
 
         transaction_index = transaction_table[transaction_table["transaction_id"] == int(op[1])].index
         
@@ -518,15 +523,19 @@ def run_wait_list():
 
         if op[0] == 'begin':
             if not begin(int(op[1])):
+                wait_list = wait_list_copy[:-1]
                 break
         elif op[0] == 'read':
             if not read(int(op[1]), op[2]):
+                wait_list = wait_list_copy[:-1]
                 break
         elif op[0] == 'write':
             if not write(int(op[1]), op[2]):
+                wait_list = wait_list_copy[:-1]
                 break
         elif op[0] == 'end':
             if not end(int(op[1])):
+                wait_list = wait_list_copy[:-1]
                 break
 
     in_waitlist = False
@@ -570,11 +579,11 @@ if __name__=='__main__':
 
     #print((input_ops))
     #print((output_list))
-    with open('output.txt', 'w') as f:
+    with open(output_file, 'w') as f:
         for item in output_list:
             f.write("%s\n" % item)
 
-    file1=open('output.txt',"a+")
+    file1 = open(output_file, "a+")
     file1.write("\n*number of output operations may be greater than number of input operations \n because operations that are waiting are started once \n the locks are acquired")
     file1.close()
     # for i in range(len(output_list)):
