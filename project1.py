@@ -96,14 +96,15 @@ def read(transaction_id, data_item):
             if wound_wait_result == 'abort':
 
                 # release all locks held by the transaction
-                locks_to_release = lock_table[lock_table["transaction_id"] == transaction_id]
+                locks_to_release = str(lock_table[lock_table["transaction_id"] == conflicting_transaction_id]["data_item"].values)[1:-1]
+                lock_table = lock_table[lock_table["transaction_id"] != conflicting_transaction_id]
 
                 # apply read lock
                 lock = {"transaction_id": transaction_id, "data_item": data_item, "state": "read"}
                 lock_table = lock_table.append(lock, ignore_index=True)
 
                 # set message string
-                message = "Abort Transaction " + str(conflicting_transaction_id) + " and release locks on " + str(locks_to_release["data_item"].values)[1:-1] + ", acquire read lock on " + data_item
+                message = "Abort Transaction " + str(conflicting_transaction_id) + " and release locks on " + locks_to_release + ", acquire read lock on " + data_item
             else:
 
                 # add blocked operation to wait_list
@@ -251,7 +252,8 @@ def write(transaction_id, data_item):
             if wound_wait_result == 'abort':
 
                 # release all locks held by the transaction
-                locks_to_release = lock_table[lock_table["transaction_id"] == transaction_id]
+                locks_to_release = str(lock_table[lock_table["transaction_id"] == conflicting_transaction_id]["data_item"].values)[1:-1]
+                lock_table = lock_table[lock_table["transaction_id"] != conflicting_transaction_id]
 
                 # apply write lock
                 lock_index = lock_table[(lock_table["transaction_id"] == transaction_id) & (lock_table["data_item"] == data_item)].index
@@ -263,7 +265,7 @@ def write(transaction_id, data_item):
                     lock_table.at[lock_index, "state"] = "write"
 
                 # set message string
-                message = "Abort Transaction " + str(conflicting_transaction_id) + " and release locks on " + str(locks_to_release["data_item"].values)[1:-1] + ", acquire write lock on " + data_item
+                message = "Abort Transaction " + str(conflicting_transaction_id) + " and release locks on " + locks_to_release + ", acquire write lock on " + data_item
             else:
                 
                 # add blocked operation to wait_list
@@ -382,13 +384,11 @@ def end(transaction_id):
     if transaction_table[transaction_table["transaction_id"] == transaction_id]["state"].values[0] == "active":
         
         # release all locks held by the transaction
-        locks_to_release = lock_table[lock_table["transaction_id"] == transaction_id]
-        
-        # print("locks to release: " + str(locks_to_release))
+        locks_to_release = str(lock_table[lock_table["transaction_id"] == transaction_id]["data_item"].values)[1:-1]
         lock_table = lock_table[lock_table["transaction_id"] != transaction_id]
 
         # append to output file
-        output="e" + str(transaction_id) + ";     :Transaction " + str(transaction_id) + ": end, release locks on " + str(locks_to_release["data_item"].values)[1:-1]
+        output="e" + str(transaction_id) + ";     :Transaction " + str(transaction_id) + ": end, release locks on " + locks_to_release
         if in_waitlist:
             output = output + ' (from waitlist)'
         print(output)
@@ -480,9 +480,6 @@ def wound_wait(requesting_transaction_id, locking_transaction_id):
         # set status of locking transaction to 'aborted'
         locking_transaction_index = locking_transaction.index
         transaction_table.at[locking_transaction_index, "state"] = "aborted"
-
-        # release locks
-        lock_table = lock_table[lock_table["transaction_id"] != locking_transaction_id]
 
     return output
 
