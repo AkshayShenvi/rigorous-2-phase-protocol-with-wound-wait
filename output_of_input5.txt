@@ -1,0 +1,20 @@
+b1;     :Transaction 1: start
+r1(Y);  :Transaction 1: acquire read lock on Y
+r1(Z);  :Transaction 1: acquire read lock on Z
+b2;     :Transaction 2: start
+r2(Y);  :Transaction 2: acquire read lock on Y
+b3;     :Transaction 3: start
+r3(Y);  :Transaction 3: acquire read lock on Y
+w1(Z);  :Transaction 1: acquire write lock on Z
+w3(Y);  :Transaction 3: Requesting write lock on Y: wound wait : Block Transaction 3, add operation to wait list
+e1;     :Transaction 1: end, release locks on 'Y' 'Z'
+w3(Y);  :Transaction 3: Requesting write lock on Y: wound wait : Block Transaction 3, add operation to wait list (from waitlist)
+e3;     :Transaction 3: waiting, added operation to waiting list
+w2(Y);  :Transaction 2: Requesting write lock on Y: wound wait : Abort Transaction 3 and release locks on 'Y', acquire write lock on Y
+r2(X);  :Transaction 2: acquire read lock on X
+w2(X);  :Transaction 2: acquire write lock on X
+e2;     :Transaction 2: end, release locks on 'Y' 'X'
+
+*number of output operations may be greater than number of input operations 
+ because operations that are waiting are started once 
+ the locks are acquired
