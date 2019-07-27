@@ -1,3 +1,6 @@
+Akshay Shenvi, 1001670648
+Yash Bardapurkar, 1001731650
+
 b1;     :Transaction 1: start
 r1(Y);  :Transaction 1: acquire read lock on Y
 r1(Z);  :Transaction 1: acquire read lock on Z
@@ -9,11 +12,15 @@ w1(Z);  :Transaction 1: acquire write lock on Z
 w3(Y);  :Transaction 3: Requesting write lock on Y: wound wait : Block Transaction 3, add operation to wait list
 e1;     :Transaction 1: end, release locks on 'Y' 'Z'
 w3(Y);  :Transaction 3: Requesting write lock on Y: wound wait : Block Transaction 3, add operation to wait list (from waitlist)
-e3;     :Transaction 3: waiting, added operation to waiting list
-w2(Y);  :Transaction 2: Requesting write lock on Y: wound wait : Abort Transaction 3 and release locks on 'Y', acquire write lock on Y
+e3;     :Transaction 3: aborted because operation of T3 was in wait list (creating a deadlock), release locks on 'Y'
+w2(Y);  :Transaction 2: acquire write lock on Y
 r2(X);  :Transaction 2: acquire read lock on X
 w2(X);  :Transaction 2: acquire write lock on X
 e2;     :Transaction 2: end, release locks on 'Y' 'X'
+
+Transaction 1 : timestamp: 1, transaction is completed
+Transaction 2 : timestamp: 2, transaction is completed
+Transaction 3 : timestamp: 3, transaction is aborted
 
 *number of output operations may be greater than number of input operations 
  because operations that are waiting are started once 

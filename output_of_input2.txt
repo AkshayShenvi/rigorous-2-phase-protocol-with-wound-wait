@@ -1,3 +1,6 @@
+Akshay Shenvi, 1001670648
+Yash Bardapurkar, 1001731650
+
 b1;     :Transaction 1: start
 r1(Y);  :Transaction 1: acquire read lock on Y
 w1(Y);  :Transaction 1: acquire write lock on Y
@@ -21,6 +24,11 @@ w4(X);  :Transaction 4: Requesting write lock on X: wound wait : Block Transacti
 e3;     :Transaction 3: end, release locks on 'Z' 'X'
 w4(X);  :Transaction 4: acquire write lock on X (from waitlist)
 e4;     :Transaction 4: end, release locks on 'X'
+
+Transaction 1 : timestamp: 1, transaction is completed
+Transaction 2 : timestamp: 2, transaction is completed
+Transaction 3 : timestamp: 3, transaction is completed
+Transaction 4 : timestamp: 4, transaction is completed
 
 *number of output operations may be greater than number of input operations 
  because operations that are waiting are started once 
